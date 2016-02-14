@@ -152,6 +152,8 @@ CmdPSG:
     bit 4, a
     jr z, .volume
 .tone
+    ld a, 1
+    ld [H_TYPE], a
     ld d, ChannelDataLow>>8
     ld a, [H_CHANNEL]
     ld e, a
@@ -162,11 +164,33 @@ CmdPSG:
     inc hl
     jp ReadCommand
 .volume
-    ; TODO
+    xor a
+    ld [H_TYPE], a
+    ld d, ChannelVolume>>8
+    ld a, [H_CHANNEL]
+    ld e, a
+    ld a, [hl]
+    and $0f
+    ld [de], a
+    call UpdateChannelVolume
     inc hl
     jp ReadCommand
 
 .data
+    ld a, [H_TYPE]
+    and a
+    jr .data_ ; XXX
+.volume_
+    ld d, ChannelVolume>>8
+    ld a, [H_CHANNEL]
+    ld e, a
+    ld a, [hl]
+    and %00001111
+    ld [de], a
+    call UpdateChannelVolume
+    inc hl
+    jp ReadCommand
+.data_
     ld d, ChannelDataHigh>>8
     ld a, [H_CHANNEL]
     ld e, a
@@ -179,7 +203,7 @@ CmdPSG:
 
 UpdateChannel:
     ld a, [H_CHANNEL]
-    cp $3
+    cp $4
     ret nc
     ;ld c, $13
     ;jr .x
@@ -223,26 +247,32 @@ UpdateChannel:
     ld [c], a
     ret
 
+UpdateChannelVolume:
+    ld a, [H_CHANNEL]
+    rlca
+    rlca
+    ld c, a
+    ld a, [H_CHANNEL]
+    add c
+    add $12
+    ld c, a
+    
+    ld a, [H_CHANNEL]
+    ld e, a
+    ld d, ChannelVolume>>8
+    ld a, [de]
+    cpl
+    and $0f
+    swap a
+    ld [c], a
+    ret
+
 CmdWait:
     ld a, [hli]
     ld c, a
     ld a, [hli]
     ld b, a
-.loop
-    push af
-    pop af
-    push af
-    pop af
-    push af
-    pop af
-    push af
-    pop af
-    push af
-    pop af
-    dec bc
-    ld a, b
-    cp c
-    jr nz, .loop
+    halt
     jp ReadCommand
 
 CmdWaitFrame:
@@ -267,8 +297,8 @@ INCLUDE "freqlut.asm"
 
 
 SECTION "vgm", ROMX, BANK[$1]
-INCBIN "s1title.vgm"
-;INCBIN "s1ghz.vgm", 0, $4000
+;INCBIN "s1title.vgm"
+INCBIN "s1ghz.vgm", 0, $4000
 SECTION "vgm1", ROMX, BANK[$2]
 ;INCBIN "s1ghz.vgm", $4000, $53d0-$4000
 ;SECTION "vgm2", ROMX, BANK[$3]
