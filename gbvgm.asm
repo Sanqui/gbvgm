@@ -149,8 +149,8 @@ CmdPSG:
     and %00000011
     ld [H_CHANNEL], a
     ld a, [hl]
-    bit 4, a
-    jr z, .volume
+    bit 4, a ; type
+    jr nz, .volume
 .tone
     ld a, 1
     ld [H_TYPE], a
@@ -179,7 +179,7 @@ CmdPSG:
 .data
     ld a, [H_TYPE]
     and a
-    jr .data_ ; XXX
+    jr nz, .data_ ; XXX
 .volume_
     ld d, ChannelVolume>>8
     ld a, [H_CHANNEL]
@@ -247,7 +247,7 @@ UpdateChannel:
     ld [c], a
     ret
 
-UpdateChannelVolume:
+UpdateChannelVolume: ret
     ld a, [H_CHANNEL]
     rlca
     rlca
@@ -268,10 +268,14 @@ UpdateChannelVolume:
     ret
 
 CmdWait:
+    ; TODO
     ld a, [hli]
     ld c, a
     ld a, [hli]
     ld b, a
+    halt
+    halt
+    halt
     halt
     jp ReadCommand
 
