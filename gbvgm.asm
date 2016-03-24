@@ -46,6 +46,20 @@ Section "start",HOME[$150]
 Start150:
     jp Start
 
+
+AdvanceStream:
+    inc hl
+    bit 7, h
+    ret z
+    push af
+    ld a, [H_BANK]
+    inc a
+    ld [$2000], a
+    ld [H_BANK], a
+    ld hl, $4000
+    pop af
+    ret
+
 Start:
 
     ; fill the memory with zeroes
@@ -87,7 +101,12 @@ Start:
     ld [$ffff], a
     ld a, %00000001
     ld [$ffff], a
+    
+    xor a
+    ld [SongCounter], a
     ei
+
+    
     
 Player:
     lda [$ff10], $00
@@ -102,11 +121,29 @@ Player:
     lda [$ff18], $00
     lda [$ff19], %11110000
     
-    lda [$ff1a], $00
-    lda [$ff1b], $8f
-    lda [$ff1c], $f0
+    lda [$ff1a], $80
+    lda [$ff1b], $00
+    lda [$ff1c], %01000000
     lda [$ff1d], $00
     lda [$ff1e], %11110000
+    
+    lda [$ff30], $ff
+    ld [$ff31], a
+    ld [$ff32], a
+    ld [$ff33], a
+    ld [$ff34], a
+    ld [$ff35], a
+    ld [$ff36], a
+    ld [$ff37], a
+    xor a
+    ld [$ff38], a
+    ld [$ff39], a
+    ld [$ff3a], a
+    ld [$ff3b], a
+    ld [$ff3c], a
+    ld [$ff3d], a
+    ld [$ff3e], a
+    ld [$ff3f], a
     
     ld a, $ff
     ld [$ff24], a
@@ -114,10 +151,13 @@ Player:
     ld a, $f1
     ld [$ff26], a
     
+    lda [H_BANK], 2
+    ld [$2000], a
     
     ld hl, $4040
 ReadCommand:
-    ld a, [hli]
+    ld a, [hl]
+    call AdvanceStream
     cp $50
     jp z, CmdPSG
     cp $61
@@ -126,14 +166,6 @@ ReadCommand:
     jp z, CmdWaitFrame
     cp $66
     jp z, End
-    cp $00
-    jr nz, .unknown    
-    ld a, [H_BANK]
-    inc a
-    ld [H_BANK], a
-    ld [$2000], a
-    ld hl, $4000
-    jr ReadCommand
 .unknown
     ld b, b
     jr ReadCommand
@@ -161,7 +193,7 @@ CmdPSG:
     and $0f
     ld [de], a
     call UpdateChannel
-    inc hl
+    call AdvanceStream
     jp ReadCommand
 .volume
     xor a
@@ -173,7 +205,7 @@ CmdPSG:
     and $0f
     ld [de], a
     call UpdateChannelVolume
-    inc hl
+    call AdvanceStream
     jp ReadCommand
 
 .data
@@ -188,7 +220,7 @@ CmdPSG:
     and %00001111
     ld [de], a
     call UpdateChannelVolume
-    inc hl
+    call AdvanceStream
     jp ReadCommand
 .data_
     ld d, ChannelDataHigh>>8
@@ -198,13 +230,13 @@ CmdPSG:
     and %00111111
     ld [de], a
     call UpdateChannel
-    inc hl
+    call AdvanceStream
     jp ReadCommand
 
 UpdateChannel:
     ld a, [H_CHANNEL]
     cp $4
-    ret nc
+    jp z, UpdateNoiseChannel
     ;ld c, $13
     ;jr .x
     
@@ -229,22 +261,40 @@ UpdateChannel:
     or b
     ld b, a
     
+    ld a, [H_CHANNEL]
+    cp 2
+    jr z, .ch3
+.notch3
     ld a, [de]
     swap a
     and %00000011
     or FreqLUT>>9
+    jr .gotfreqlut
+.ch3
+    ld a, [de]
+    swap a
+    and %00000011
+    or FreqLUTCh3>>9
+.gotfreqlut
     ld d, a
     ld e, b
     sla e
     rl d
+    
+.noadjust
     
     ld a, [de]
     inc de
     ld [c], a
     inc c
     ld a, [de]
-    or  %10000000
     ld [c], a
+    ret
+    ret
+
+UpdateNoiseChannel:
+    ld a, [ChannelDataLow+3]
+    
     ret
 
 UpdateChannelVolume: ret
@@ -285,32 +335,46 @@ CmdWaitFrame:
 
 End:
     halt
+    halt
+    halt
+    halt
+    halt
+    halt
+    halt
+    halt
+    ld a, [SongCounter]
+    inc a
+    ld [SongCounter], a
+    cp $2
+    jr z, .end
+    ld bc, $4da0 - $4bfe + 2
+.loop
+    call AdvanceStream
+    dec bc
+    ld a, b
+    or c
+    jr nz, .loop
+    jp ReadCommand
+.end
+    jp Player
+    
     jr End
 
 
 SECTION "freqlut", HOME[$3000]
-FreqLUT:
 ;x = 0
 ;rept 1024
-;printf MUL(DIV((x<<16)<<5, 3579545.0), 1.0) ; 131072.0
+;printf (2048.0 - (DIV(131072.0, DIV(3579545.0, (x<<16)<<5))))
 ;printt "\n"
-;dw (-(MUL(DIV((x<<16)<<5, 3579545.0), 131072.0)-2048.0)) >> 16
+;dw (2048.0 - (DIV(131072.0, DIV(3579545.0, (x<<16)<<5)))) >> 16
 ;x=x+1
 ;endr
 INCLUDE "freqlut.asm"
 
 
-SECTION "vgm", ROMX, BANK[$1]
-;INCBIN "s1title.vgm"
-INCBIN "s1ghz.vgm", 0, $4000
-SECTION "vgm1", ROMX, BANK[$2]
-;INCBIN "s1ghz.vgm", $4000, $53d0-$4000
-;SECTION "vgm2", ROMX, BANK[$3]
-;INCBIN "s1ghz.vgm", $8000, $c000
-;SECTION "vgm3", ROMX, BANK[$4]
-;INCBIN "s1ghz.vgm", $c000, $10000
 
-
+SECTION "nothing", ROMX, BANK[$1]
+    ds $4000
 
 
 
